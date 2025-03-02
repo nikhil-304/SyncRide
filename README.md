@@ -1,4 +1,4 @@
-# College RideShare Application
+# SyncRide: Synchronizing rides for seamless travel.
 
 A web-based vehicle pooling system designed specifically for college communities. This application facilitates carpooling among students, making transportation more efficient, cost-effective, and environmentally friendly.
 
@@ -26,7 +26,7 @@ A web-based vehicle pooling system designed specifically for college communities
 1. Clone the repository
 ```bash
 git clone [repository-url]
-cd RideShare
+cd SyncRide
 ```
 
 2. Create and activate a virtual environment
