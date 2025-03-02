@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+    #map {
+        height: 400px;
+        margin-bottom: 20px;
+        border-radius: 8px;
+    }
+    .location-input {
+        margin-bottom: 10px;
+    }
+    .coordinates-group {
+        display: none;
+    }
+    .location-buttons {
+        margin-bottom: 15px;
+    }
+    .location-buttons button {
+        margin-right: 10px;
+    }
+    .ride-card {
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    .ride-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .distance-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background-color: #007bff;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 0.8em;
+    }
+    #loading-spinner {
+        display: none;
+        text-align: center;
+        margin: 20px 0;
+    }
+    .radius-control {
+        margin-bottom: 15px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Find a Ride</h1>
+    <div class="row">
+        <div class="col-md-8">
+            <div class="location-buttons">
+                <button type="button" class="btn btn-primary" onclick="getCurrentLocation()">
+                    <i class="fas fa-location-arrow"></i> Use Current Location
+                </button>
+            </div>
+            <div class="radius-control">
+                <label for="radius-slider" class="form-label">Search Radius: <span id="radius-value">10</span> km</label>
+                <input type="range" class="form-range" id="radius-slider" min="1" max="50" value="10" 
+                       onchange="document.getElementById('radius-value').textContent = this.value; searchNearbyRides();">
+            </div>
+            <div id="map"></div>
+        </div>
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <form method="POST" novalidate>
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="coordinates-group">
+                            {{ form.pickup_latitude(id="pickup_lat") }}
+                            {{ form.pickup_longitude(id="pickup_lng") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div id="loading-spinner">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p>Searching for nearby rides...</p>
+            </div>
+            
+            <div id="nearby-rides">
+                <h3>Available Rides</h3>
+                <div id="rides-list">
+                    {% if rides %}
+                        {% for ride in rides %}
+                            <div class="card mb-3 ride-card" onclick="showRideRoute(this)" 
+                                 data-start-lat="{{ ride.start_latitude }}"
+                                 data-start-lng="{{ ride.start_longitude }}"
+                                 data-end-lat="{{ ride.end_latitude }}"
+                                 data-end-lng="{{ ride.end_longitude }}">
+                                <div class="card-body">
+                                    <h5 class="card-title">{{ ride.start_location }} → {{ ride.end_location }}</h5>
+                                    <p class="card-text">
+                                        <small class="text-muted">
+                                            <i class="fas fa-calendar"></i> {{ ride.departure_time.strftime('%B %d, %Y') }}<br>
+                                            <i class="fas fa-clock"></i> {{ ride.departure_time.strftime('%I:%M %p') }}<br>
+                                            <i class="fas fa-users"></i> {{ ride.available_seats }} seats available<br>
+                                            <i class="fas fa-money-bill"></i> ₹{{ ride.price }} per seat
+                                        </small>
+                                    </p>
+                                    <a href="{{ url_for('rides.request_ride', ride_id=ride.id) }}" 
+                                       class="btn btn-primary btn-sm">Request Ride</a>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i> No active rides available at the moment.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    var map = L.map('map').setView([20.5937, 78.9629], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    var userMarker, searchCircle;
+    var rideMarkers = [];
+    var routeLine;
+
+    const userIcon = L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34]
+    });
+
+    const startIcon = L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34]
+    });
+
+    const endIcon = L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34]
+    });
+
+    function clearMap() {
+        if (userMarker) map.removeLayer(userMarker);
+        if (searchCircle) map.removeLayer(searchCircle);
+        rideMarkers.forEach(marker => map.removeLayer(marker));
+        rideMarkers = [];
+        if (routeLine) map.removeLayer(routeLine);
+    }
+
+    function getCurrentLocation() {
+        document.getElementById('loading-spinner').style.display = 'block';
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition(function(position) {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                
+                clearMap();
+                
+                // Update form fields
+                document.getElementById('pickup_lat').value = lat;
+                document.getElementById('pickup_lng').value = lng;
+                
+                // Add user marker and circle
+                userMarker = L.marker([lat, lng], {icon: userIcon}).addTo(map);
+                const radius = document.getElementById('radius-slider').value * 1000; // Convert to meters
+                searchCircle = L.circle([lat, lng], {
+                    radius: radius,
+                    color: '#007bff',
+                    fillColor: '#007bff',
+                    fillOpacity: 0.1
+                }).addTo(map);
+                
+                // Center and zoom map
+                map.setView([lat, lng], 12);
+                
+                // Search for nearby rides
+                searchNearbyRides();
+                
+                // Reverse geocode to get address
+                fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById('pickup_location').value = data.display_name;
+                    });
+            }, function(error) {
+                alert("Error getting location: " + error.message);
+                document.getElementById('loading-spinner').style.display = 'none';
+            });
+        } else {
+            alert("Geolocation is not supported by your browser.");
+            document.getElementById('loading-spinner').style.display = 'none';
+        }
+    }
+
+    function searchNearbyRides() {
+        const lat = document.getElementById('pickup_lat').value;
+        const lng = document.getElementById('pickup_lng').value;
+        const radius = document.getElementById('radius-slider').value;
+        
+        if (!lat || !lng) return;
+        
+        document.getElementById('loading-spinner').style.display = 'block';
+        
+        // Clear existing ride markers
+        rideMarkers.forEach(marker => map.removeLayer(marker));
+        rideMarkers = [];
+        
+        fetch(`/rides/nearby-rides?lat=${lat}&lon=${lng}&radius=${radius}`)
+            .then(response => response.json())
+            .then(rides => {
+                const ridesList = document.getElementById('rides-list');
+                ridesList.innerHTML = '';
+                
+                if (rides.length === 0) {
+                    ridesList.innerHTML = '<div class="alert alert-info">No rides available in this area.</div>';
+                } else {
+                    rides.forEach(ride => {
+                        // Add marker for ride start location
+                        const marker = L.marker([ride.start_latitude, ride.start_longitude], {
+                            icon: startIcon
+                        }).addTo(map);
+                        marker.bindPopup(`
+                            <strong>${ride.start_location} → ${ride.end_location}</strong><br>
+                            Distance: ${ride.distance} km<br>
+                            Price: ₹${ride.price}<br>
+                            <a href="/rides/request/${ride.id}" class="btn btn-primary btn-sm mt-2">Request Ride</a>
+                        `);
+                        rideMarkers.push(marker);
+                        
+                        // Add ride card to list
+                        const rideCard = document.createElement('div');
+                        rideCard.className = 'card mb-3 ride-card';
+                        rideCard.innerHTML = `
+                            <div class="card-body">
+                                <span class="distance-badge">${ride.distance} km away</span>
+                                <h5 class="card-title">${ride.start_location} → ${ride.end_location}</h5>
+                                <p class="card-text">
+                                    <small class="text-muted">
+                                        <i class="fas fa-calendar"></i> ${ride.departure_time}<br>
+                                        <i class="fas fa-users"></i> ${ride.available_seats} seats available<br>
+                                        <i class="fas fa-money-bill"></i> ₹${ride.price} per seat
+                                    </small>
+                                </p>
+                                <a href="/rides/request/${ride.id}" class="btn btn-primary btn-sm">Request Ride</a>
+                            </div>
+                        `;
+                        rideCard.onclick = () => showRideDetails(ride);
+                        ridesList.appendChild(rideCard);
+                    });
+                }
+                document.getElementById('loading-spinner').style.display = 'none';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('loading-spinner').style.display = 'none';
+                document.getElementById('rides-list').innerHTML = 
+                    '<div class="alert alert-danger">Error loading nearby rides.</div>';
+            });
+    }
+
+    function showRideDetails(ride) {
+        // Clear existing route
+        if (routeLine) map.removeLayer(routeLine);
+        
+        // Draw route line
+        const latlngs = [
+            [ride.start_latitude, ride.start_longitude],
+            [ride.end_latitude, ride.end_longitude]
+        ];
+        routeLine = L.polyline(latlngs, {color: 'blue'}).addTo(map);
+        
+        // Add end marker
+        const endMarker = L.marker([ride.end_latitude, ride.end_longitude], {
+            icon: endIcon
+        }).addTo(map);
+        rideMarkers.push(endMarker);
+        
+        // Fit map to show the entire route
+        map.fitBounds(L.latLngBounds(latlngs).pad(0.1));
+    }
+
+    // Event listeners for map clicks
+    map.on('click', function(e) {
+        const lat = e.latlng.lat;
+        const lng = e.latlng.lng;
+        
+        clearMap();
+        
+        // Update form fields
+        document.getElementById('pickup_lat').value = lat;
+        document.getElementById('pickup_lng').value = lng;
+        
+        // Add user marker and circle
+        userMarker = L.marker([lat, lng], {icon: userIcon}).addTo(map);
+        const radius = document.getElementById('radius-slider').value * 1000; // Convert to meters
+        searchCircle = L.circle([lat, lng], {
+            radius: radius,
+            color: '#007bff',
+            fillColor: '#007bff',
+            fillOpacity: 0.1
+        }).addTo(map);
+        
+        // Search for nearby rides
+        searchNearbyRides();
+        
+        // Reverse geocode to get address
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('pickup_location').value = data.display_name;
+            });
+    });
+</script>
+{% endblock %}

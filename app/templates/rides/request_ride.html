@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+    #map {
+        height: 400px;
+        margin-bottom: 20px;
+        border-radius: 8px;
+    }
+    .coordinates-group {
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Request a Ride</h1>
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Ride Details</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>From:</strong> {{ ride.start_location }}</p>
+                            <p><strong>To:</strong> {{ ride.end_location }}</p>
+                            <p><strong>Departure:</strong> {{ ride.departure_time.strftime('%B %d, %Y %I:%M %p') }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Available Seats:</strong> {{ ride.available_seats }}</p>
+                            <p><strong>Price per Seat:</strong> ₹{{ ride.price }}</p>
+                            <p><strong>Vehicle:</strong> {{ ride.vehicle_type }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="map"></div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Request Form</h5>
+                    <form method="POST" novalidate>
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="mb-3">
+                            {{ form.pickup_location.label(class="form-label") }}
+                            {{ form.pickup_location(class="form-control" + (" is-invalid" if form.pickup_location.errors else "")) }}
+                            {% for error in form.pickup_location.errors %}
+                                <div class="invalid-feedback">{{ error }}</div>
+                            {% endfor %}
+                            <small class="text-muted">Click on the map to set pickup location</small>
+                        </div>
+
+                        <div class="coordinates-group">
+                            {{ form.pickup_latitude(id="pickup_lat") }}
+                            {{ form.pickup_longitude(id="pickup_lng") }}
+                        </div>
+
+                        <div class="mb-3">
+                            {{ form.seats_requested.label(class="form-label") }}
+                            {{ form.seats_requested(class="form-control" + (" is-invalid" if form.seats_requested.errors else "")) }}
+                            {% for error in form.seats_requested.errors %}
+                                <div class="invalid-feedback">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="d-grid">
+                            {{ form.submit(class="btn btn-primary") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    // Initialize map
+    var map = L.map('map').setView([{{ ride.start_latitude }}, {{ ride.start_longitude }}], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // Add markers for ride start and end points
+    var startMarker = L.marker([{{ ride.start_latitude }}, {{ ride.start_longitude }}])
+        .bindPopup('Start Location')
+        .addTo(map);
+    
+    var endMarker = L.marker([{{ ride.end_latitude }}, {{ ride.end_longitude }}])
+        .bindPopup('End Location')
+        .addTo(map);
+
+    // Draw route line
+    var routeLine = L.polyline([
+        [{{ ride.start_latitude }}, {{ ride.start_longitude }}],
+        [{{ ride.end_latitude }}, {{ ride.end_longitude }}]
+    ], {color: 'blue'}).addTo(map);
+
+    // Fit map to show the route
+    map.fitBounds(routeLine.getBounds().pad(0.1));
+
+    // Variables for pickup marker
+    var pickupMarker;
+    var pickupLatInput = document.getElementById('pickup_lat');
+    var pickupLngInput = document.getElementById('pickup_lng');
+
+    // Handle map clicks for pickup location
+    map.on('click', function(e) {
+        var latlng = e.latlng;
+        
+        if (pickupMarker) {
+            map.removeLayer(pickupMarker);
+        }
+        
+        pickupMarker = L.marker(latlng, {draggable: true})
+            .addTo(map)
+            .bindPopup('Pickup Location')
+            .openPopup();
+        
+        pickupLatInput.value = latlng.lat;
+        pickupLngInput.value = latlng.lng;
+        
+        pickupMarker.on('dragend', function(e) {
+            var pos = e.target.getLatLng();
+            pickupLatInput.value = pos.lat;
+            pickupLngInput.value = pos.lng;
+        });
+    });
+</script>
+{% endblock %}

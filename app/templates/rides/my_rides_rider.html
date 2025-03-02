@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}My Rides{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>My Offered Rides</h1>
+        <a href="{{ url_for('rides.offer_ride') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Offer New Ride
+        </a>
+    </div>
+
+    <div class="row">
+        {% for ride in rides %}
+        <div class="col-md-6 mb-4">
+            <div class="card h-100 ride-card">
+                <div class="card-body">
+                    <h5 class="card-title">{{ ride.start_location }} → {{ ride.end_location }}</h5>
+                    <div class="mb-3">
+                        <small class="text-muted">
+                            <i class="fas fa-calendar"></i> {{ ride.departure_time.strftime('%B %d, %Y') }}<br>
+                            <i class="fas fa-clock"></i> {{ ride.departure_time.strftime('%I:%M %p') }}<br>
+                            <i class="fas fa-users"></i> {{ ride.available_seats }} seats available<br>
+                            <i class="fas fa-car"></i> {{ ride.vehicle_type }} ({{ ride.vehicle_number }})<br>
+                            <i class="fas fa-money-bill"></i> ₹{{ ride.price }} per seat
+                        </small>
+                    </div>
+                    
+                    {% if ride.requests.count() > 0 %}
+                    <div class="mb-3">
+                        <h6>Ride Requests</h6>
+                        {% for request in ride.requests %}
+                        <div class="card mb-2">
+                            <div class="card-body p-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ request.traveler.username }}</strong><br>
+                                        <small class="text-muted">
+                                            {{ request.seats_requested }} seat(s)<br>
+                                            Pickup: {{ request.pickup_location }}
+                                        </small>
+                                    </div>
+                                    <div class="text-end">
+                                        {% if request.status == 'pending' %}
+                                        <span class="badge bg-warning">Pending</span>
+                                        <div class="btn-group mt-2">
+                                            <a href="{{ url_for('rides.handle_request', request_id=request.id, action='accept') }}" 
+                                               class="btn btn-success btn-sm">Accept</a>
+                                            <a href="{{ url_for('rides.handle_request', request_id=request.id, action='reject') }}" 
+                                               class="btn btn-danger btn-sm">Reject</a>
+                                        </div>
+                                        {% elif request.status == 'accepted' %}
+                                        <span class="badge bg-success">Accepted</span>
+                                        {% elif request.status == 'completed' %}
+                                        <span class="badge bg-info">Completed</span>
+                                        {% if not request.ratings %}
+                                        <div class="mt-2">
+                                            <a href="{{ url_for('rides.rate_ride', request_id=request.id) }}" 
+                                               class="btn btn-outline-primary btn-sm">Rate Passenger</a>
+                                        </div>
+                                        {% endif %}
+                                        {% elif request.status == 'rejected' %}
+                                        <span class="badge bg-danger">Rejected</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No requests yet</p>
+                    {% endif %}
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="badge bg-{{ 'success' if ride.status == 'active' else 
+                                               'info' if ride.status == 'completed' else 
+                                               'secondary' }}">
+                            {{ ride.status.title() }}
+                        </span>
+                        <div class="btn-group">
+                            {% if ride.status == 'active' %}
+                                <a href="{{ url_for('rides.complete_ride', ride_id=ride.id) }}" 
+                                   class="btn btn-outline-success btn-sm">Complete</a>
+                                <a href="{{ url_for('rides.cancel_ride', ride_id=ride.id) }}" 
+                                   class="btn btn-outline-danger btn-sm">Cancel</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col">
+            <div class="alert alert-info">
+                You haven't offered any rides yet. 
+                <a href="{{ url_for('rides.offer_ride') }}" class="alert-link">Offer your first ride!</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
