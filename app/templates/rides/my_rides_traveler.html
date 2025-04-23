@@ -38,10 +38,17 @@
                     <div class="d-flex justify-content-between align-items-center">
                         <span class="badge bg-{{ 
                             'warning' if request.status == 'pending' 
-                            else 'success' if request.status == 'accepted' 
+                            else 'success' if request.status == 'accepted' and request.ride.departure_time > now
+                            else 'warning' if request.status == 'accepted' and request.ride.departure_time <= now
                             else 'info' if request.status == 'completed'
                             else 'danger' 
-                        }}">{{ request.status.title() }}</span>
+                        }}">
+                            {% if request.status == 'accepted' and request.ride.departure_time <= now %}
+                                Expired
+                            {% else %}
+                                {{ request.status.title() }}
+                            {% endif %}
+                        </span>
                         
                         <div class="btn-group">
                             {% if request.status == 'pending' %}
@@ -58,6 +65,12 @@
                             {% elif request.status == 'completed' and not request.ratings %}
                             <a href="{{ url_for('rides.rate_ride', request_id=request.id) }}" 
                                class="btn btn-outline-primary btn-sm">Rate Driver</a>
+                            {% endif %}
+                            <!-- Add this inside the btn-group div around line 63, after the Contact Driver button -->
+                            {% if request.status == 'accepted' %}
+                            <a href="{{ url_for('chat.chat', request_id=request.id) }}" class="btn btn-outline-primary btn-sm">
+                                <i class="fas fa-comments"></i> Chat
+                            </a>
                             {% endif %}
                         </div>
                     </div>

@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Green Credits Dashboard{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .credit-card {
+        background: linear-gradient(135deg, #43a047, #1b5e20);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .credit-amount {
+        font-size: 2.5rem;
+        font-weight: bold;
+    }
+    .credit-label {
+        font-size: 1rem;
+        opacity: 0.8;
+    }
+    .achievement-card {
+        border-radius: 10px;
+        margin-bottom: 15px;
+        transition: transform 0.3s;
+    }
+    .achievement-card:hover {
+        transform: translateY(-5px);
+    }
+    .achievement-icon {
+        font-size: 2rem;
+        margin-bottom: 10px;
+    }
+    .achievement-locked {
+        opacity: 0.5;
+        filter: grayscale(1);
+    }
+    .credit-history-item {
+        border-left: 3px solid #43a047;
+        padding-left: 15px;
+        margin-bottom: 15px;
+    }
+    .redemption-history-item {
+        border-left: 3px solid #f44336;
+        padding-left: 15px;
+        margin-bottom: 15px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h1>Green Credits Dashboard</h1>
+            <p class="text-muted">Track your environmental impact and rewards</p>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('green.leaderboard') }}" class="btn btn-outline-success">
+                <i class="fas fa-trophy"></i> Leaderboard
+            </a>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="credit-card">
+                <div class="credit-label">Available Credits</div>
+                <div class="credit-amount">{{ total_credits }}</div>
+                <div class="mt-3">
+                    <a href="{{ url_for('green.redeem_credits') }}" class="btn btn-light">Redeem Credits</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="credit-card" style="background: linear-gradient(135deg, #26a69a, #00796b);">
+                <div class="credit-label">CO₂ Saved</div>
+                <div class="credit-amount">{{ carbon_saved }} kg</div>
+                <div class="mt-3">
+                    <small>That's equivalent to planting {{ (carbon_saved / 22)|round|int }} trees!</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="credit-card" style="background: linear-gradient(135deg, #7e57c2, #4527a0);">
+                <div class="credit-label">Leaderboard Position</div>
+                <div class="credit-amount">#{{ leaderboard_position }}</div>
+                <div class="mt-3">
+                    <small>Keep earning to climb the ranks!</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Recent Achievements</h5>
+                    <a href="{{ url_for('green.achievements') }}" class="btn btn-sm btn-outline-primary">View All</a>
+                </div>
+                <div class="card-body">
+                    {% if user_achievements %}
+                        <div class="row">
+                            {% for user_achievement in user_achievements[:6] %}
+                                <div class="col-md-4 text-center">
+                                    <div class="achievement-card p-3">
+                                        <div class="achievement-icon">
+                                            <i class="{{ user_achievement.achievement.icon }}"></i>
+                                        </div>
+                                        <h6>{{ user_achievement.achievement.name }}</h6>
+                                        <small class="text-muted">{{ user_achievement.earned_at.strftime('%b %d, %Y') }}</small>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted">You haven't earned any achievements yet. Start sharing rides to earn them!</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Credit History</h5>
+                </div>
+                <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                    {% if credits %}
+                        {% for credit in credits[:10] %}
+                            <div class="credit-history-item">
+                                <div class="d-flex justify-content-between">
+                                    <strong>+{{ credit.amount }} credits</strong>
+                                    <small>{{ credit.created_at.strftime('%b %d, %Y') }}</small>
+                                </div>
+                                <div>{{ credit.reason }}</div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted">No credit history yet. Complete rides to earn credits!</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Redemption History</h5>
+                </div>
+                <div class="card-body">
+                    {% if redemptions %}
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Amount</th>
+                                        <th>Type</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for redemption in redemptions %}
+                                        <tr>
+                                            <td>{{ redemption.created_at.strftime('%b %d, %Y') }}</td>
+                                            <td>{{ redemption.amount }} credits</td>
+                                            <td>{{ redemption.reward_type.title() }}</td>
+                                            <td>{{ redemption.reward_details }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">You haven't redeemed any credits yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

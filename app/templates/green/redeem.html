@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}Redeem Green Credits{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .credit-card {
+        background: linear-gradient(135deg, #43a047, #1b5e20);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .credit-amount {
+        font-size: 2.5rem;
+        font-weight: bold;
+    }
+    .credit-label {
+        font-size: 1rem;
+        opacity: 0.8;
+    }
+    .reward-card {
+        border-radius: 10px;
+        overflow: hidden;
+        transition: transform 0.3s;
+        height: 100%;
+        cursor: pointer;
+    }
+    .reward-card:hover {
+        transform: translateY(-5px);
+    }
+    .reward-card.selected {
+        border: 2px solid #43a047;
+    }
+    .reward-icon {
+        font-size: 2rem;
+        margin-bottom: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <a href="{{ url_for('green.dashboard') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="credit-card">
+                <div class="credit-label">Available Credits</div>
+                <div class="credit-amount">{{ total_credits }}</div>
+                <div class="mt-3">
+                    <small>Use your credits to redeem rewards</small>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">How It Works</h5>
+                </div>
+                <div class="card-body">
+                    <p>Green credits are earned by:</p>
+                    <ul>
+                        <li>Sharing rides with others</li>
+                        <li>Completing rides as a passenger</li>
+                        <li>Earning achievements</li>
+                    </ul>
+                    <p>Redeem your credits for various rewards to encourage sustainable transportation!</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Redeem Credits</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('green.redeem_credits') }}">
+                        <div class="mb-4">
+                            <h6>Select a Reward Type</h6>
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <div class="card reward-card" onclick="selectReward('discount', this)">
+                                        <div class="card-body text-center p-3">
+                                            <div class="reward-icon">
+                                                <i class="fas fa-tag text-primary"></i>
+                                            </div>
+                                            <h5>Ride Discount</h5>
+                                            <p class="text-muted">Get a discount on your next ride</p>
+                                            <div class="mt-2">
+                                                <span class="badge bg-primary">50 credits</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <div class="card reward-card" onclick="selectReward('donation', this)">
+                                        <div class="card-body text-center p-3">
+                                            <div class="reward-icon">
+                                                <i class="fas fa-hand-holding-heart text-success"></i>
+                                            </div>
+                                            <h5>Eco Donation</h5>
+                                            <p class="text-muted">Donate to environmental causes</p>
+                                            <div class="mt-2">
+                                                <span class="badge bg-success">100 credits</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <div class="card reward-card" onclick="selectReward('priority', this)">
+                                        <div class="card-body text-center p-3">
+                                            <div class="reward-icon">
+                                                <i class="fas fa-star text-warning"></i>
+                                            </div>
+                                            <h5>Priority Matching</h5>
+                                            <p class="text-muted">Get priority in ride matching</p>
+                                            <div class="mt-2">
+                                                <span class="badge bg-warning text-dark">75 credits</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <input type="hidden" name="reward_type" id="reward_type">
+                        <input type="hidden" name="amount" id="reward_amount">
+                        
+                        <div class="mb-3">
+                            <label for="details" class="form-label">Additional Details (optional)</label>
+                            <textarea class="form-control" id="details" name="details" rows="3" placeholder="Any specific preferences or notes for your redemption"></textarea>
+                        </div>
+                        
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-success" id="redeemBtn" disabled>Redeem Credits</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Reward Details</h5>
+                </div>
+                <div class="card-body">
+                    <div id="discount-details" class="reward-details" style="display: none;">
+                        <h5><i class="fas fa-tag text-primary"></i> Ride Discount</h5>
+                        <p>Redeem 50 credits for a 20% discount on your next ride. The discount will be automatically applied to your next booking.</p>
+                        <ul>
+                            <li>Valid for 30 days from redemption</li>
+                            <li>Cannot be combined with other offers</li>
+                            <li>Maximum discount value: ₹100</li>
+                        </ul>
+                    </div>
+                    
+                    <div id="donation-details" class="reward-details" style="display: none;">
+                        <h5><i class="fas fa-hand-holding-heart text-success"></i> Eco Donation</h5>
+                        <p>Redeem 100 credits to make a donation to environmental conservation efforts. We partner with local NGOs to plant trees and support sustainable initiatives.</p>
+                        <ul>
+                            <li>Each donation plants approximately 5 trees</li>
+                            <li>You'll receive a certificate of your contribution</li>
+                            <li>Track the impact of your donation on your profile</li>
+                        </ul>
+                    </div>
+                    
+                    <div id="priority-details" class="reward-details" style="display: none;">
+                        <h5><i class="fas fa-star text-warning"></i> Priority Matching</h5>
+                        <p>Redeem 75 credits for priority status in ride matching for 2 weeks. Your ride requests will be shown to drivers first, increasing your chances of getting accepted.</p>
+                        <ul>
+                            <li>Valid for 14 days from redemption</li>
+                            <li>Applies to all ride requests during the period</li>
+                            <li>Priority badge shown on your profile</li>
+                        </ul>
+                    </div>
+                    
+                    <div id="no-selection" class="reward-details">
+                        <p class="text-muted text-center">Select a reward to see details</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block scripts %}
+{{ super() }}
+<script>
+    function selectReward(type, element) {
+        // Remove selected class from all cards
+        document.querySelectorAll('.reward-card').forEach(card => {
+            card.classList.remove('selected');
+        });
+        
+        // Add selected class to clicked card
+        element.classList.add('selected');
+        
+        // Set form values
+        document.getElementById('reward_type').value = type;
+        
+        // Set amount based on type
+        let amount = 0;
+        if (type === 'discount') amount = 50;
+        else if (type === 'donation') amount = 100;
+        else if (type === 'priority') amount = 75;
+        
+        document.getElementById('reward_amount').value = amount;
+        
+        // Enable submit button
+        document.getElementById('redeemBtn').disabled = false;
+        
+        // Show appropriate details and hide others
+        document.querySelectorAll('.reward-details').forEach(detail => {
+            detail.style.display = 'none';
+        });
+        
+        document.getElementById(type + '-details').style.display = 'block';
+        document.getElementById('no-selection').style.display = 'none';
+        
+        // Check if user has enough credits
+        const totalCredits = {{ total_credits }};
+        if (totalCredits < amount) {
+            document.getElementById('redeemBtn').disabled = true;
+            document.getElementById('redeemBtn').innerHTML = 'Not Enough Credits';
+        } else {
+            document.getElementById('redeemBtn').innerHTML = 'Redeem ' + amount + ' Credits';
+        }
+    }
+</script>
+{% endblock %}
+{% endblock %}

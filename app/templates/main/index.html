@@ -122,39 +122,58 @@
 </section>
 
 <!-- How It Works Section -->
+<!-- After the stats section, add this new section -->
 <section class="py-5 bg-light">
     <div class="container">
-        <h2 class="text-center mb-5">How It Works</h2>
-        <div class="row">
-            <div class="col-md-3">
-                <div class="text-center">
-                    <i class="fas fa-user-plus fa-3x text-primary mb-3"></i>
-                    <h5>1. Sign Up</h5>
-                    <p>Create your account in minutes</p>
-                </div>
+        <div class="row align-items-center">
+            <div class="col-lg-6">
+                <h2 class="fw-bold mb-4">Earn Green Credits & Make a Difference</h2>
+                <p class="lead">Every ride you share helps reduce carbon emissions and earns you Green Credits!</p>
+                <ul class="list-unstyled mb-4">
+                    <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i> Earn credits for every completed ride</li>
+                    <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i> Unlock achievements as you ride</li>
+                    <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i> Redeem credits for rewards</li>
+                    <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i> Track your environmental impact</li>
+                </ul>
+                {% if current_user.is_authenticated %}
+                <a href="{{ url_for('green.dashboard') }}" class="btn btn-success btn-lg">View Your Green Credits</a>
+                {% else %}
+                <a href="{{ url_for('auth.login') }}" class="btn btn-success btn-lg">Join & Start Earning</a>
+                {% endif %}
             </div>
-            <div class="col-md-3">
-                <div class="text-center">
-                    <i class="fas fa-search fa-3x text-primary mb-3"></i>
-                    <h5>2. Find a Ride</h5>
-                    <p>Search for available rides</p>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="text-center">
-                    <i class="fas fa-handshake fa-3x text-primary mb-3"></i>
-                    <h5>3. Connect</h5>
-                    <p>Connect with the driver</p>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="text-center">
-                    <i class="fas fa-car fa-3x text-primary mb-3"></i>
-                    <h5>4. Travel</h5>
-                    <p>Enjoy your shared ride</p>
+            <div class="col-lg-6">
+                <div class="card shadow">
+                    <div class="card-header bg-success text-white">
+                        <h4 class="mb-0"><i class="fas fa-trophy"></i> Top Green Contributors</h4>
+                    </div>
+                    <div class="card-body">
+                        {% set top_users = users[:3] if users is defined else [] %}
+                        {% if top_users %}
+                            <div class="list-group">
+                                {% for user in top_users %}
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <span class="badge bg-success rounded-pill me-2">{{ loop.index }}</span>
+                                            <strong>{{ user.username }}</strong>
+                                            {% if current_user.is_authenticated and user.id == current_user.id %}
+                                                <span class="badge bg-primary ms-1">You</span>
+                                            {% endif %}
+                                        </div>
+                                        <span class="badge bg-light text-dark">{{ user.get_total_credits() }} credits</span>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <div class="text-center mt-3">
+                                <a href="{{ url_for('green.leaderboard') }}" class="btn btn-outline-success">View Full Leaderboard</a>
+                            </div>
+                        {% else %}
+                            <p class="text-center text-muted my-3">Be the first to earn Green Credits!</p>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+</section>
 </section>
 {% endblock %}

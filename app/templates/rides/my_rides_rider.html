@@ -52,6 +52,14 @@
                                         </div>
                                         {% elif request.status == 'accepted' %}
                                         <span class="badge bg-success">Accepted</span>
+                                        <!-- Add this inside the text-end div around line 54, after the Accepted badge -->
+                                        {% if request.status == 'accepted' %}
+                                        <div class="mt-2">
+                                            <a href="{{ url_for('chat.chat', request_id=request.id) }}" class="btn btn-outline-primary btn-sm">
+                                                <i class="fas fa-comments"></i> Chat with Passenger
+                                            </a>
+                                        </div>
+                                        {% endif %}
                                         {% elif request.status == 'completed' %}
                                         <span class="badge bg-info">Completed</span>
                                         {% if not request.ratings %}
@@ -74,10 +82,15 @@
                     {% endif %}
                     
                     <div class="d-flex justify-content-between align-items-center">
-                        <span class="badge bg-{{ 'success' if ride.status == 'active' else 
+                        <span class="badge bg-{{ 'success' if ride.status == 'active' and ride.departure_time > now else 
+                                               'warning' if ride.status == 'active' and ride.departure_time <= now else
                                                'info' if ride.status == 'completed' else 
                                                'secondary' }}">
-                            {{ ride.status.title() }}
+                            {% if ride.status == 'active' and ride.departure_time <= now %}
+                                Expired
+                            {% else %}
+                                {{ ride.status.title() }}
+                            {% endif %}
                         </span>
                         <div class="btn-group">
                             {% if ride.status == 'active' %}

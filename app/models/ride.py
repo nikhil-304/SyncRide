@@ -1,3 +1,4 @@
+# Add this to the imports at the top if not already there
 from datetime import datetime
 from app import db
 
@@ -49,6 +50,9 @@ class RideRequest(db.Model):
     pickup_longitude = db.Column(db.Float)
     seats_requested = db.Column(db.Integer, default=1)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Update the relationship to use back_populates
+    messages = db.relationship('Message', back_populates='ride_request', overlaps="request")
     
     def __repr__(self):
         return f'<RideRequest {self.id}>'

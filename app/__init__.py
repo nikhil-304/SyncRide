@@ -13,6 +13,8 @@ mail = Mail()
 bcrypt = Bcrypt()
 socketio = SocketIO()
 
+# Update the create_app function to create tables before initializing achievements
+
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
@@ -23,23 +25,32 @@ def create_app(config_class=Config):
     mail.init_app(app)
     bcrypt.init_app(app)
     socketio.init_app(app)
-
-    # Set up login configuration
-    login_manager.login_view = 'auth.login'
-    login_manager.login_message_category = 'info'
-
+    
     # Register blueprints
     from app.main import bp as main_bp
     app.register_blueprint(main_bp)
-
+    
     from app.auth import bp as auth_bp
     app.register_blueprint(auth_bp, url_prefix='/auth')
-
+    
     from app.rides import bp as rides_bp
     app.register_blueprint(rides_bp, url_prefix='/rides')
-
-    # Create database tables
+    
+    # Register the chat blueprint
+    from app.chat import bp as chat_bp
+    app.register_blueprint(chat_bp, url_prefix='/chat')
+    
+    # Register the green blueprint
+    from app.green import bp as green_bp
+    app.register_blueprint(green_bp, url_prefix='/green')
+    
+    # Import and register the chat socket events
+    from app.chat import events
+    
+    # Create database tables and initialize green achievements
     with app.app_context():
-        db.create_all()
-
+        db.create_all()  # Create all tables first
+        from app.green.routes import init_achievements
+        init_achievements()
+    
     return app

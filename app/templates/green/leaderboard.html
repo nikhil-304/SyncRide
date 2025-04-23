@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}Green Credits Leaderboard{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .leaderboard-card {
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .leaderboard-header {
+        background: linear-gradient(135deg, #43a047, #1b5e20);
+        color: white;
+        padding: 20px;
+    }
+    .user-row {
+        padding: 15px;
+        border-bottom: 1px solid #eee;
+        transition: background-color 0.2s;
+    }
+    .user-row:hover {
+        background-color: #f9f9f9;
+    }
+    .user-row.current-user {
+        background-color: #e8f5e9;
+    }
+    .rank {
+        font-weight: bold;
+        font-size: 1.2rem;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+    }
+    .rank-1 {
+        background-color: #ffd700;
+        color: #333;
+    }
+    .rank-2 {
+        background-color: #c0c0c0;
+        color: #333;
+    }
+    .rank-3 {
+        background-color: #cd7f32;
+        color: white;
+    }
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: #e0e0e0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        color: #555;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <a href="{{ url_for('green.dashboard') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="leaderboard-card">
+                <div class="leaderboard-header">
+                    <h2><i class="fas fa-trophy"></i> Green Credits Leaderboard</h2>
+                    <p>Top eco-friendly users making a difference</p>
+                </div>
+                
+                <div class="p-3">
+                    {% if users %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Rank</th>
+                                        <th>User</th>
+                                        <th>Green Credits</th>
+                                        <th>CO₂ Saved</th>
+                                        <th>Achievements</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for user in users %}
+                                        <tr class="user-row {% if current_user.is_authenticated and user.id == current_user.id %}current-user{% endif %}">
+                                            <td>
+                                                <div class="rank {% if loop.index == 1 %}rank-1{% elif loop.index == 2 %}rank-2{% elif loop.index == 3 %}rank-3{% endif %}">
+                                                    {{ loop.index }}
+                                                </div>
+                                            </td>
+                                            <td class="d-flex align-items-center">
+                                                <div class="user-avatar me-2">
+                                                    {{ user.username[0] }}
+                                                </div>
+                                                <div>
+                                                    <strong>{{ user.username }}</strong>
+                                                    {% if current_user.is_authenticated and user.id == current_user.id %}
+                                                        <span class="badge bg-success">You</span>
+                                                    {% endif %}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <strong>{{ user.get_total_credits() }}</strong> credits
+                                            </td>
+                                            <td>
+                                                {{ user.get_carbon_saved() }} kg
+                                            </td>
+                                            <td>
+                                                {{ user.achievements_earned|length }}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5">
+                            <p class="text-muted">No users have earned green credits yet.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            {% if current_user.is_authenticated %}
+                <div class="card mt-4">
+                    <div class="card-body">
+                        <h5 class="card-title">Your Position</h5>
+                        {% if user_position %}
+                            <p>You are currently ranked <strong>#{{ user_position }}</strong> on the leaderboard with <strong>{{ current_user.get_total_credits() }}</strong> green credits.</p>
+                            
+                            {% if user_position > 3 %}
+                                <p>Keep earning credits to climb the ranks!</p>
+                                <a href="{{ url_for('rides.find_ride') }}" class="btn btn-success">Find a Ride</a>
+                                <a href="{{ url_for('rides.offer_ride') }}" class="btn btn-outline-success">Offer a Ride</a>
+                            {% else %}
+                                <p>Congratulations on being in the top 3! Keep up the great work!</p>
+                            {% endif %}
+                        {% else %}
+                            <p>Start earning green credits to appear on the leaderboard!</p>
+                            <a href="{{ url_for('green.dashboard') }}" class="btn btn-success">Learn How</a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

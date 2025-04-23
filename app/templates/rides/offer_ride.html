@@ -145,7 +145,19 @@
                 <!-- Other form fields -->
                 <div class="form-group mb-3">
                     <label for="departure_time">Departure Time</label>
-                    {{ form.departure_time(class="form-control", id="departure_time", type="datetime-local") }}
+                    <div class="row">
+                        <div class="col-md-6 mb-2">
+                            {{ form.departure_time(class="form-control", id="departure_time", type="datetime-local", min=current_datetime) }}
+                        </div>
+                    </div>
+                    {% if form.departure_time.errors %}
+                        <div class="invalid-feedback d-block">
+                            {% for error in form.departure_time.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <small class="form-text text-muted">Select both date and time for your departure</small>
                 </div>
 
                 <div class="form-group mb-3">

@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Achievements{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .achievement-card {
+        border-radius: 10px;
+        overflow: hidden;
+        transition: transform 0.3s;
+        height: 100%;
+    }
+    .achievement-card:hover {
+        transform: translateY(-5px);
+    }
+    .achievement-icon {
+        font-size: 2.5rem;
+        margin-bottom: 15px;
+    }
+    .achievement-locked {
+        opacity: 0.5;
+        filter: grayscale(1);
+    }
+    .achievement-header {
+        background: linear-gradient(135deg, #7e57c2, #4527a0);
+        color: white;
+        padding: 20px;
+    }
+    .achievement-type {
+        background-color: #f5f5f5;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <a href="{{ url_for('green.dashboard') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="achievement-header">
+            <h2><i class="fas fa-medal"></i> Achievements</h2>
+            <p>Unlock achievements by using RideShare and reducing your carbon footprint</p>
+        </div>
+        
+        <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h5>Total Achievements</h5>
+                            <h2>{{ earned_achievement_ids|length }} / {{ all_achievements|length }}</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar bg-success" role="progressbar" 
+                             style="width: {{ (earned_achievement_ids|length / all_achievements|length * 100)|round }}%;" 
+                             aria-valuenow="{{ earned_achievement_ids|length }}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="{{ all_achievements|length }}">
+                            {{ (earned_achievement_ids|length / all_achievements|length * 100)|round|int }}%
+                        </div>
+                    </div>
+                    <p class="text-muted mt-2">Keep using RideShare to unlock more achievements!</p>
+                </div>
+            </div>
+            
+            {% for type, achievements in achievement_groups.items() %}
+                <div class="achievement-type">
+                    <h4>
+                        {% if type == 'rides_completed' %}
+                            <i class="fas fa-car"></i> Ride Achievements
+                        {% elif type == 'carbon_saved' %}
+                            <i class="fas fa-leaf"></i> Environmental Impact
+                        {% elif type == 'credits_earned' %}
+                            <i class="fas fa-coins"></i> Green Credit Milestones
+                        {% else %}
+                            <i class="fas fa-star"></i> {{ type|title }} Achievements
+                        {% endif %}
+                    </h4>
+                    
+                    <div class="row">
+                        {% for achievement in achievements %}
+                            <div class="col-md-4 mb-4">
+                                <div class="achievement-card card {% if achievement.id not in earned_achievement_ids %}achievement-locked{% endif %}">
+                                    <div class="card-body text-center p-4">
+                                        <div class="achievement-icon">
+                                            <i class="{{ achievement.icon }}"></i>
+                                        </div>
+                                        <h5>{{ achievement.name }}</h5>
+                                        <p>{{ achievement.description }}</p>
+                                        
+                                        {% if achievement.id in earned_achievement_ids %}
+                                            <span class="badge bg-success">Unlocked</span>
+                                        {% else %}
+                                            <div class="mt-3">
+                                                <small class="text-muted">Requirement: {{ achievement.requirement }}</small>
+                                                
+                                                {% if type == 'rides_completed' %}
+                                                    {% set progress = current_user.rides_offered.filter_by(status='completed').count() if current_user.role == 'rider' else current_user.rides_taken.filter_by(status='completed').count() %}
+                                                {% elif type == 'carbon_saved' %}
+                                                    {% set progress = current_user.get_carbon_saved() %}
+                                                {% elif type == 'credits_earned' %}
+                                                    {% set progress = current_user.get_total_credits() %}
+                                                {% else %}
+                                                    {% set progress = 0 %}
+                                                {% endif %}
+                                                
+                                                <div class="progress mt-2">
+                                                    <div class="progress-bar bg-info" role="progressbar" 
+                                                         style="width: {{ (progress / achievement.requirement * 100)|round if progress < achievement.requirement else 100 }}%;" 
+                                                         aria-valuenow="{{ progress }}" 
+                                                         aria-valuemin="0" 
+                                                         aria-valuemax="{{ achievement.requirement }}">
+                                                        {{ progress }} / {{ achievement.requirement }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

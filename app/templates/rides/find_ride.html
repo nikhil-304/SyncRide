@@ -60,9 +60,9 @@
                 </button>
             </div>
             <div class="radius-control">
-                <label for="radius-slider" class="form-label">Search Radius: <span id="radius-value">10</span> km</label>
-                <input type="range" class="form-range" id="radius-slider" min="1" max="50" value="10" 
-                       onchange="document.getElementById('radius-value').textContent = this.value; searchNearbyRides();">
+                <label for="radius-slider" class="form-label">Search Radius: <span id="radius-value">1</span> km</label>
+                <input type="range" class="form-range" id="radius-slider" min="1" max="50" value="1" 
+                       onchange="document.getElementById('radius-value').textContent = this.value; updateSearchRadius(); searchNearbyRides();">
             </div>
             <div id="map"></div>
         </div>
@@ -165,6 +165,30 @@
         if (routeLine) map.removeLayer(routeLine);
     }
 
+    function updateSearchRadius() {
+        const lat = document.getElementById('pickup_lat').value;
+        const lng = document.getElementById('pickup_lng').value;
+        const radius = document.getElementById('radius-slider').value * 1000; // Convert to meters
+        
+        if (lat && lng) {
+            // Remove existing circle if it exists
+            if (searchCircle) {
+                map.removeLayer(searchCircle);
+            }
+            
+            // Create new circle with updated radius
+            searchCircle = L.circle([lat, lng], {
+                radius: radius,
+                color: '#007bff',
+                fillColor: '#007bff',
+                fillOpacity: 0.1
+            }).addTo(map);
+            
+            // Adjust map view to fit the circle
+            map.fitBounds(searchCircle.getBounds());
+        }
+    }
+
     function getCurrentLocation() {
         document.getElementById('loading-spinner').style.display = 'block';
         if ("geolocation" in navigator) {
@@ -188,8 +212,8 @@
                     fillOpacity: 0.1
                 }).addTo(map);
                 
-                // Center and zoom map
-                map.setView([lat, lng], 12);
+                // Center and zoom map to fit the circle
+                map.fitBounds(searchCircle.getBounds());
                 
                 // Search for nearby rides
                 searchNearbyRides();
@@ -224,14 +248,20 @@
         rideMarkers = [];
         
         fetch(`/rides/nearby-rides?lat=${lat}&lon=${lng}&radius=${radius}`)
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
             .then(rides => {
                 const ridesList = document.getElementById('rides-list');
                 ridesList.innerHTML = '';
                 
                 if (rides.length === 0) {
-                    ridesList.innerHTML = '<div class="alert alert-info">No rides available in this area.</div>';
+                    ridesList.innerHTML = '<div class="alert alert-info">No rides available in this area. Try increasing your search radius.</div>';
                 } else {
+                    // Existing code for displaying rides
                     rides.forEach(ride => {
                         // Add marker for ride start location
                         const marker = L.marker([ride.start_latitude, ride.start_longitude], {
@@ -250,16 +280,25 @@
                         rideCard.className = 'card mb-3 ride-card';
                         rideCard.innerHTML = `
                             <div class="card-body">
-                                <span class="distance-badge">${ride.distance} km away</span>
                                 <h5 class="card-title">${ride.start_location} → ${ride.end_location}</h5>
                                 <p class="card-text">
-                                    <small class="text-muted">
-                                        <i class="fas fa-calendar"></i> ${ride.departure_time}<br>
-                                        <i class="fas fa-users"></i> ${ride.available_seats} seats available<br>
-                                        <i class="fas fa-money-bill"></i> ₹${ride.price} per seat
-                                    </small>
+                                    <strong>Departure:</strong> ${ride.departure_time}<br>
+                                    <strong>Price:</strong> ₹${ride.price}<br>
+                                    <strong>Distance:</strong> ${ride.distance} km<br>
+                                    ${ride.match_score ? `
+                                    <strong>Match Score:</strong> 
+                                    <div class="match-score">
+                                        <div class="progress">
+                                            <div class="progress-bar bg-success" role="progressbar" 
+                                                     style="width: ${(ride.match_score)}%" 
+                                                     aria-valuenow="${ride.match_score}" aria-valuemin="0" aria-valuemax="100">
+                                                ${ride.match_score}%
+                                            </div>
+                                        </div>
+                                    </div>
+                                    ` : ''}
                                 </p>
-                                <a href="/rides/request/${ride.id}" class="btn btn-primary btn-sm">Request Ride</a>
+                                <a href="/rides/request/${ride.id}" class="btn btn-primary">Request Ride</a>
                             </div>
                         `;
                         rideCard.onclick = () => showRideDetails(ride);
@@ -272,7 +311,7 @@
                 console.error('Error:', error);
                 document.getElementById('loading-spinner').style.display = 'none';
                 document.getElementById('rides-list').innerHTML = 
-                    '<div class="alert alert-danger">Error loading nearby rides.</div>';
+                    '<div class="alert alert-warning">Unable to load nearby rides. Please try again later.</div>';
             });
     }
 

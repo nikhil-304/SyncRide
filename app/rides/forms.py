@@ -1,19 +1,26 @@
 from flask_wtf import FlaskForm
 from wtforms import StringField, FloatField, IntegerField, DateTimeField, SubmitField, HiddenField
 from wtforms.validators import DataRequired, NumberRange, Length, Optional
+from datetime import datetime
 
 class OfferRideForm(FlaskForm):
     start_location = StringField('Start Location', validators=[DataRequired()])
-    end_location = StringField('End Location', validators=[DataRequired()])
     start_latitude = FloatField('Start Latitude', validators=[DataRequired()])
     start_longitude = FloatField('Start Longitude', validators=[DataRequired()])
+    
+    end_location = StringField('End Location', validators=[DataRequired()])
     end_latitude = FloatField('End Latitude', validators=[DataRequired()])
     end_longitude = FloatField('End Longitude', validators=[DataRequired()])
+    
     departure_time = DateTimeField('Departure Time', format='%Y-%m-%dT%H:%M', validators=[DataRequired()])
-    available_seats = IntegerField('Available Seats', validators=[DataRequired(), NumberRange(min=1, max=4)])
-    price = FloatField('Price per Seat', validators=[DataRequired(), NumberRange(min=0)])
+    available_seats = IntegerField('Available Seats', validators=[DataRequired(), NumberRange(min=1, max=10)])
+    price = FloatField('Price per Seat (₹)', validators=[DataRequired(), NumberRange(min=0)])
     vehicle_type = StringField('Vehicle Type', validators=[DataRequired()])
     vehicle_number = StringField('Vehicle Number', validators=[DataRequired()])
+    
+    def validate_departure_time(self, field):
+        if field.data < datetime.now():
+            raise ValidationError('Departure time cannot be in the past')
     submit = SubmitField('Offer Ride')
 
 class FindRideForm(FlaskForm):

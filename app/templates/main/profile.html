@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}Profile{% endblock %}
+
+{% block styles %}
+<style>
+    .profile-header {
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        padding: 30px;
+        margin-bottom: 30px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    
+    .profile-image {
+        width: 150px;
+        height: 150px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 5px solid white;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    .stats-card {
+        transition: transform 0.3s ease;
+        margin-bottom: 20px;
+    }
+    
+    .stats-card:hover {
+        transform: translateY(-5px);
+    }
+    
+    .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #0d6efd;
+    }
+    
+    .settings-section {
+        background-color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Profile Header -->
+    <div class="profile-header">
+        <div class="row align-items-center">
+            <div class="col-md-3 text-center">
+                <img src="{{ url_for('static', filename='uploads/' + current_user.profile_image) }}" 
+                     alt="Profile Image" class="profile-image mb-3">
+                <h4>{{ current_user.username }}</h4>
+                <span class="badge bg-primary text-capitalize">{{ current_user.role }}</span>
+            </div>
+            <div class="col-md-9">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><i class="fas fa-envelope me-2"></i> {{ current_user.email }}</p>
+                        <p><i class="fas fa-phone me-2"></i> {{ current_user.phone_number }}</p>
+                        <p><i class="fas fa-calendar me-2"></i> Member since {{ current_user.created_at.strftime('%B %d, %Y') }}</p>
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        <a href="#" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editProfileModal">
+                            <i class="fas fa-edit"></i> Edit Profile
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Stats Section -->
+    <h3 class="mb-4">Your Statistics</h3>
+    <div class="row">
+        {% if current_user.role == 'rider' %}
+        <div class="col-md-4">
+            <div class="card stats-card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-car fa-3x text-primary mb-3"></i>
+                    <div class="stat-number">{{ current_user.rides_offered.count() }}</div>
+                    <div class="stat-label">Rides Offered</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stats-card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-users fa-3x text-primary mb-3"></i>
+                    {% set completed_rides = current_user.rides_offered.filter_by(status='completed').count() %}
+                    <div class="stat-number">{{ completed_rides }}</div>
+                    <div class="stat-label">Completed Rides</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stats-card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-star fa-3x text-primary mb-3"></i>
+                    <div class="stat-number">
+                        {% set ratings_count = namespace(count=0, total=0) %}
+                        {% for ride in current_user.rides_offered %}
+                            {% for request in ride.requests %}
+                                {% for rating in request.ratings if rating.to_user_id == current_user.id %}
+                                    {% set ratings_count.count = ratings_count.count + 1 %}
+                                    {% set ratings_count.total = ratings_count.total + rating.rating %}
+                                {% endfor %}
+                            {% endfor %}
+                        {% endfor %}
+                        {{ (ratings_count.total / ratings_count.count)|round(1) if ratings_count.count > 0 else 'N/A' }}
+                    </div>
+                    <div class="stat-label">Average Rating</div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-md-4">
+            <div class="card stats-card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-route fa-3x text-primary mb-3"></i>
+                    <div class="stat-number">{{ current_user.rides_taken.count() }}</div>
+                    <div class="stat-label">Rides Taken</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stats-card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-check-circle fa-3x text-primary mb-3"></i>
+                    {% set completed_rides = current_user.rides_taken.filter_by(status='completed').count() %}
+                    <div class="stat-number">{{ completed_rides }}</div>
+                    <div class="stat-label">Completed Rides</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stats-card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-star fa-3x text-primary mb-3"></i>
+                    <div class="stat-number">
+                        {% set ratings_count = namespace(count=0, total=0) %}
+                        {% for request in current_user.rides_taken %}
+                            {% for rating in request.ratings if rating.to_user_id == current_user.id %}
+                                {% set ratings_count.count = ratings_count.count + 1 %}
+                                {% set ratings_count.total = ratings_count.total + rating.rating %}
+                            {% endfor %}
+                        {% endfor %}
+                        {{ (ratings_count.total / ratings_count.count)|round(1) if ratings_count.count > 0 else 'N/A' }}
+                    </div>
+                    <div class="stat-label">Average Rating</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Account Settings -->
+    <!-- After the statistics section, add this new section with proper formatting -->
+    <h3 class="mt-5 mb-4">Green Impact</h3>
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card stats-card h-100 border-success">
+                <div class="card-body text-center">
+                    <i class="fas fa-leaf fa-3x text-success mb-3"></i>
+                    <div class="stat-number text-success">{{ current_user.get_total_credits() }}</div>
+                    <div class="stat-label">Green Credits</div>
+                    <a href="{{ url_for('green.dashboard') }}" class="btn btn-sm btn-outline-success mt-3">View Dashboard</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stats-card h-100 border-success">
+                <div class="card-body text-center">
+                    <i class="fas fa-medal fa-3x text-success mb-3"></i>
+                    <div class="stat-number text-success">{{ current_user.achievements_earned|length }}</div>
+                    <div class="stat-label">Achievements</div>
+                    <a href="{{ url_for('green.achievements') }}" class="btn btn-sm btn-outline-success mt-3">View Achievements</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stats-card h-100 border-success">
+                <div class="card-body text-center">
+                    <i class="fas fa-globe-americas fa-3x text-success mb-3"></i>
+                    <div class="stat-number text-success">{{ current_user.get_carbon_saved() }} kg</div>
+                    <div class="stat-label">CO₂ Saved</div>
+                    <div class="mt-3">
+                        <span class="badge bg-success">Rank #{{ current_user.get_leaderboard_position() }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Keep the existing security and profile picture sections with better UI -->
+    <div class="row mt-5">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-lock"></i> Security</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('main.change_password') }}">
+                        <div class="mb-3">
+                            <label for="current_password" class="form-label">Current Password</label>
+                            <input type="password" class="form-control" id="current_password" name="current_password" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="new_password" class="form-label">New Password</label>
+                            <input type="password" class="form-control" id="new_password" name="new_password" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="confirm_password" class="form-label">Confirm New Password</label>
+                            <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Change Password</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-image"></i> Profile Picture</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('main.update_profile_picture') }}" enctype="multipart/form-data">
+                        <div class="mb-3 text-center">
+                            <img src="{{ url_for('static', filename='uploads/' + current_user.profile_image) if current_user.profile_image else url_for('static', filename='img/default-profile.png') }}" 
+                                 class="img-thumbnail profile-preview mb-3" style="max-width: 150px; max-height: 150px;">
+                        </div>
+                        <div class="mb-3">
+                            <label for="profile_picture" class="form-label">Select New Image</label>
+                            <input class="form-control" type="file" id="profile_picture" name="profile_picture" accept="image/*">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Update Picture</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Profile Modal -->
+<div class="modal fade" id="editProfileModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Profile</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="{{ url_for('main.update_profile') }}">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="username" name="username" value="{{ current_user.username }}">
+                    </div>
+                    <div class="mb-3">
+                        <label for="phone_number" class="form-label">Phone Number</label>
+                        <input type="text" class="form-control" id="phone_number" name="phone_number" value="{{ current_user.phone_number }}">
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Change Password Modal -->
+<div class="modal fade" id="changePasswordModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Change Password</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="{{ url_for('main.change_password') }}">
+                    <div class="mb-3">
+                        <label for="current_password" class="form-label">Current Password</label>
+                        <input type="password" class="form-control" id="current_password" name="current_password">
+                    </div>
+                    <div class="mb-3">
+                        <label for="new_password" class="form-label">New Password</label>
+                        <input type="password" class="form-control" id="new_password" name="new_password">
+                    </div>
+                    <div class="mb-3">
+                        <label for="confirm_password" class="form-label">Confirm New Password</label>
+                        <input type="password" class="form-control" id="confirm_password" name="confirm_password">
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">Change Password</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
