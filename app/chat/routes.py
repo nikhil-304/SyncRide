@@ -84,3 +84,41 @@ def get_unread_count(request_id):
     ).filter(Message.sender_id != current_user.id).count()
     
     return jsonify({'unread_count': unread_count})
+
+# Add these routes to the existing chat/routes.py file
+
+@bp.route('/api/notifications/unread')
+@login_required
+def get_unread_notifications():
+    # Get all unread messages across all ride requests
+    unread_count = Message.query.join(RideRequest).filter(
+        ((RideRequest.traveler_id == current_user.id) & (Message.sender_id != current_user.id)) |
+        ((RideRequest.ride.has(Ride.rider_id == current_user.id)) & (Message.sender_id != current_user.id))
+    ).filter(Message.is_read == False).count()
+    
+    return jsonify({'unread_count': unread_count})
+
+@bp.route('/api/notifications')
+@login_required
+def get_notifications():
+    # Get recent unread messages
+    unread_messages = Message.query.join(RideRequest).filter(
+        ((RideRequest.traveler_id == current_user.id) & (Message.sender_id != current_user.id)) |
+        ((RideRequest.ride.has(Ride.rider_id == current_user.id)) & (Message.sender_id != current_user.id))
+    ).filter(Message.is_read == False).order_by(Message.created_at.desc()).limit(5).all()
+    
+    notifications = []
+    for message in unread_messages:
+        ride_request = message.ride_request
+        sender = User.query.get(message.sender_id)
+        
+        notifications.append({
+            'id': message.id,
+            'type': 'message',
+            'text': f'New message from {sender.username}',
+            'link': url_for('chat.chat', request_id=ride_request.id),
+            'timestamp': message.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'icon': 'fa-comment-alt'
+        })
+    
+    return jsonify({'notifications': notifications})

@@ -1,0 +1,713 @@
+{% extends "base.html" %}
+
+{% block title %}Track Ride{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+<style>
+    #map {
+        height: 500px;
+        width: 100%;
+        border-radius: 8px;
+    }
+    .location-card {
+        margin-bottom: 20px;
+    }
+    .status-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 5px;
+    }
+    .status-online {
+        background-color: #28a745;
+    }
+    .status-offline {
+        background-color: #dc3545;
+    }
+    .eta-badge {
+        font-size: 1.2rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2>Track Ride</h2>
+            <div class="d-flex justify-content-between align-items-center">
+                <a href="{{ url_for('rides.my_rides') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to My Rides
+                </a>
+                <a href="{{ url_for('chat.chat', request_id=ride_request.id) }}" class="btn btn-primary">
+                    <i class="fas fa-comments"></i> Chat
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Live Tracking</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div id="map"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card location-card">
+                <div class="card-header">
+                    <h5 class="mb-0">Ride Details</h5>
+                </div>
+                <div class="card-body">
+                    <h6>{{ ride.start_location }} → {{ ride.end_location }}</h6>
+                    <p class="mb-2">
+                        <i class="fas fa-calendar"></i> {{ ride.departure_time.strftime('%B %d, %Y') }}<br>
+                        <i class="fas fa-clock"></i> {{ ride.departure_time.strftime('%I:%M %p') }}<br>
+                        <i class="fas fa-car"></i> {{ ride.vehicle_type }} ({{ ride.vehicle_number }})
+                    </p>
+                </div>
+            </div>
+
+            <div class="card location-card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        {% if is_rider %}
+                        Traveler Location
+                        {% else %}
+                        Rider Location
+                        {% endif %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="status-indicator status-online" id="other-user-status"></div>
+                        <span id="other-user-status-text">Online</span>
+                    </div>
+
+                    <p class="mb-2">
+                        <strong>Name:</strong> {{ other_user.username }}<br>
+                        <strong>Phone:</strong> {{ other_user.phone_number }}<br>
+                        {% if is_rider %}
+                        <strong>Pickup:</strong> {{ ride_request.pickup_location }}
+                        {% endif %}
+                    </p>
+
+                    <div class="mt-3">
+                        <h6>Estimated Time of Arrival:</h6>
+                        <div class="eta-badge p-2 bg-light rounded text-center" id="eta-display">
+                            Calculating...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card location-card">
+                <div class="card-header">
+                    <h5 class="mb-0">Actions</h5>
+                </div>
+                <div class="card-body">
+                    <button id="share-location-btn" class="btn btn-success w-100 mb-2">
+                        <i class="fas fa-location-arrow"></i> Share My Location
+                    </button>
+                    
+                    {% if is_rider %}
+                    <button id="arrived-btn" class="btn btn-primary w-100 mb-2">
+                        <i class="fas fa-check-circle"></i> I've Arrived
+                    </button>
+                    {% endif %}
+                    
+                    <button id="refresh-map-btn" class="btn btn-outline-secondary w-100">
+                        <i class="fas fa-sync-alt"></i> Refresh Map
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+<script>
+    // Initialize variables
+    const isRider = {{ 'true' if is_rider else 'false' }};
+    const requestId = {{ ride_request.id }};
+    const rideId = {{ ride.id }};
+    const pickupLat = {{ ride_request.pickup_latitude }};
+    const pickupLng = {{ ride_request.pickup_longitude }};
+    const startLat = {{ ride.start_latitude }};
+    const startLng = {{ ride.start_longitude }};
+    const endLat = {{ ride.end_latitude }};
+    const endLng = {{ ride.end_longitude }};
+    
+    // Initialize map
+    const map = L.map('map').setView([pickupLat, pickupLng], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+    
+    // Custom icons
+    const riderIcon = L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+        shadowSize: [41, 41]
+    });
+    
+    const travelerIcon = L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+        shadowSize: [41, 41]
+    });
+    
+    const pickupIcon = L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+        shadowSize: [41, 41]
+    });
+    
+    // Add markers
+    const pickupMarker = L.marker([pickupLat, pickupLng], {icon: pickupIcon})
+        .bindPopup('Pickup Location')
+        .addTo(map);
+    
+    // Draw route line for the full ride with actual directions
+    drawFullRideRoute();
+    
+    // Add map legend
+    addMapLegend();
+    
+    // Variables for live tracking
+    let myLocationMarker;
+    let otherLocationMarker;
+    let routeToPickupLine;
+    let fullRouteLine;
+    let watchId;
+    let socket;
+    
+    // Function to add map legend
+    function addMapLegend() {
+        const legend = L.control({position: 'bottomright'});
+        
+        legend.onAdd = function(map) {
+            const div = L.DomUtil.create('div', 'info legend');
+            div.style.backgroundColor = 'white';
+            div.style.padding = '10px';
+            div.style.borderRadius = '5px';
+            div.style.boxShadow = '0 0 15px rgba(0,0,0,0.2)';
+            
+            div.innerHTML = `
+                <div style="margin-bottom: 5px;"><strong>Map Legend</strong></div>
+                <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                    <div style="background-color: blue; width: 20px; height: 3px; margin-right: 8px;"></div>
+                    <span>Main Ride Route</span>
+                </div>
+                <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                    <div style="background-color: #28a745; width: 20px; height: 3px; margin-right: 8px;"></div>
+                    <span>${isRider ? 'Route to Pickup' : 'Rider\'s Route'}</span>
+                </div>
+                <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                    <div style="background-color: red; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px;"></div>
+                    <span>Pickup Location</span>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <div style="background-color: ${isRider ? 'blue' : 'green'}; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px;"></div>
+                    <span>Your Location</span>
+                </div>
+            `;
+            
+            return div;
+        };
+        
+        legend.addTo(map);
+    }
+    
+    // Function to draw the full ride route with actual directions
+    function drawFullRideRoute() {
+        // Use OSRM API to get actual driving directions for the full ride
+        fetch(`https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.routes && data.routes.length > 0) {
+                    // Get the route geometry
+                    const routeGeometry = data.routes[0].geometry.coordinates;
+                    
+                    // Convert coordinates from [lng, lat] to [lat, lng] for Leaflet
+                    const routeCoordinates = routeGeometry.map(coord => [coord[1], coord[0]]);
+                    
+                    // Create the polyline with the route coordinates
+                    fullRouteLine = L.polyline(routeCoordinates, {
+                        color: 'blue',
+                        weight: 4,
+                        opacity: 0.7,
+                        lineJoin: 'round'
+                    }).addTo(map);
+                    
+                    // Add start and end markers with small dots
+                    const startMarker = L.marker([startLat, startLng], {
+                        icon: L.divIcon({
+                            className: 'custom-div-icon',
+                            html: `<div style="background-color: blue; width: 10px; height: 10px; border-radius: 50%; border: 2px solid white;"></div>`,
+                            iconSize: [10, 10],
+                            iconAnchor: [5, 5]
+                        })
+                    }).addTo(map).bindPopup('Start Location');
+                    
+                    const endMarker = L.marker([endLat, endLng], {
+                        icon: L.divIcon({
+                            className: 'custom-div-icon',
+                            html: `<div style="background-color: blue; width: 10px; height: 10px; border-radius: 50%; border: 2px solid white;"></div>`,
+                            iconSize: [10, 10],
+                            iconAnchor: [5, 5]
+                        })
+                    }).addTo(map).bindPopup('End Location');
+                    
+                    // Add a label to the route
+                    const midpoint = routeCoordinates[Math.floor(routeCoordinates.length / 2)];
+                    const routeLabel = L.marker(midpoint, {
+                        icon: L.divIcon({
+                            className: 'route-label',
+                            html: `<div style="background-color: blue; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">
+                                    Main Route
+                                  </div>`,
+                            iconSize: [80, 20],
+                            iconAnchor: [40, 10]
+                        })
+                    }).addTo(map);
+                    
+                    // Fit map to show the route
+                    map.fitBounds(fullRouteLine.getBounds().pad(0.1));
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching full ride route:', error);
+                
+                // Fallback to straight line if routing fails
+                fullRouteLine = L.polyline([
+                    [startLat, startLng],
+                    [endLat, endLng]
+                ], {
+                    color: 'blue', 
+                    weight: 4, 
+                    opacity: 0.7
+                }).addTo(map);
+                
+                // Fit map to show the route
+                map.fitBounds(fullRouteLine.getBounds().pad(0.1));
+            });
+    }
+    
+    // Connect to Socket.IO
+    document.addEventListener('DOMContentLoaded', function() {
+        socket = io();
+        
+        // Join tracking room
+        socket.emit('join_tracking_room', {
+            request_id: requestId
+        });
+        
+        // Listen for location updates
+        socket.on('location_update', function(data) {
+            updateOtherUserLocation(data.lat, data.lng);
+            document.getElementById('other-user-status').className = 'status-indicator status-online';
+            document.getElementById('other-user-status-text').textContent = 'Online';
+        });
+        
+        // Listen for "arrived" notification
+        socket.on('rider_arrived', function() {
+            if (!isRider) {
+                // Show notification to traveler
+                const notification = new Notification('Your ride has arrived!', {
+                    body: 'The driver has arrived at your pickup location.',
+                    icon: '/static/img/logo.png'
+                });
+                
+                // Show alert on page
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'alert alert-success alert-dismissible fade show';
+                alertDiv.innerHTML = `
+                    <strong>Your ride has arrived!</strong> The driver is at your pickup location.
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.querySelector('.container').prepend(alertDiv);
+            }
+        });
+    });
+    
+    // Function to update other user's location
+    function updateOtherUserLocation(lat, lng) {
+        // Remove existing marker if any
+        if (otherLocationMarker) {
+            map.removeLayer(otherLocationMarker);
+        }
+        
+        // Add new marker
+        otherLocationMarker = L.marker([lat, lng], {
+            icon: isRider ? travelerIcon : riderIcon
+        }).addTo(map);
+        
+        // Update route line
+        updateRouteLine();
+        
+        // Calculate and update ETA
+        if (myLocationMarker) {
+            calculateETA(
+                myLocationMarker.getLatLng().lat,
+                myLocationMarker.getLatLng().lng,
+                lat, lng
+            );
+        }
+    }
+    
+    // Function to update my location
+    function updateMyLocation(position) {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        
+        // Remove existing marker if any
+        if (myLocationMarker) {
+            map.removeLayer(myLocationMarker);
+        }
+        
+        // Add new marker
+        myLocationMarker = L.marker([lat, lng], {
+            icon: isRider ? riderIcon : travelerIcon
+        }).addTo(map);
+        
+        // Update route line
+        updateRouteLine();
+        
+        // Send location to server
+        if (socket) {
+            socket.emit('update_location', {
+                request_id: requestId,
+                lat: lat,
+                lng: lng
+            });
+        }
+        
+        // Calculate and update ETA if other user's location is known
+        if (otherLocationMarker) {
+            calculateETA(
+                lat, lng,
+                otherLocationMarker.getLatLng().lat,
+                otherLocationMarker.getLatLng().lng
+            );
+        }
+    }
+    
+    // Function to update route line
+    function updateRouteLine() {
+        // Remove existing route line if any
+        if (routeToPickupLine) {
+            map.removeLayer(routeToPickupLine);
+        }
+        
+        // If both markers exist, draw route line
+        if (myLocationMarker && (isRider ? pickupMarker : otherLocationMarker)) {
+            const targetMarker = isRider ? pickupMarker : otherLocationMarker;
+            const fromLat = myLocationMarker.getLatLng().lat;
+            const fromLng = myLocationMarker.getLatLng().lng;
+            const toLat = targetMarker.getLatLng().lat;
+            const toLng = targetMarker.getLatLng().lng;
+            
+            // Use OSRM API to get actual driving directions
+            fetch(`https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.routes && data.routes.length > 0) {
+                        // Get the route geometry
+                        const routeGeometry = data.routes[0].geometry.coordinates;
+                        
+                        // Convert coordinates from [lng, lat] to [lat, lng] for Leaflet
+                        const routeCoordinates = routeGeometry.map(coord => [coord[1], coord[0]]);
+                        
+                        // Create the polyline with the route coordinates
+                        routeToPickupLine = L.polyline(routeCoordinates, {
+                            color: '#28a745',  // Bootstrap success green
+                            weight: 5,
+                            opacity: 0.8,
+                            lineJoin: 'round',
+                            dashArray: isRider ? null : '5, 10'  // Dashed line for traveler view
+                        }).addTo(map);
+                        
+                        // Add a label to the route
+                        const midpoint = routeCoordinates[Math.floor(routeCoordinates.length / 2)];
+                        const routeLabel = L.marker(midpoint, {
+                            icon: L.divIcon({
+                                className: 'route-label',
+                                html: `<div style="background-color: #28a745; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">
+                                        ${isRider ? 'To Pickup' : 'Rider Coming'}
+                                      </div>`,
+                                iconSize: [80, 20],
+                                iconAnchor: [40, 10]
+                            })
+                        }).addTo(map);
+                        
+                        // Fit map to show both the main route and the pickup route
+                        if (fullRouteLine) {
+                            const combinedBounds = L.latLngBounds();
+                            combinedBounds.extend(routeToPickupLine.getBounds());
+                            combinedBounds.extend(fullRouteLine.getBounds());
+                            map.fitBounds(combinedBounds.pad(0.1));
+                        } else {
+                            map.fitBounds(routeToPickupLine.getBounds().pad(0.1));
+                        }
+                        
+                        // Update the ETA display
+                        const durationSeconds = data.routes[0].duration;
+                        const durationMinutes = Math.round(durationSeconds / 60);
+                        
+                        let etaText;
+                        if (durationMinutes < 1) {
+                            etaText = 'Less than a minute';
+                        } else if (durationMinutes === 1) {
+                            etaText = '1 minute';
+                        } else if (durationMinutes < 60) {
+                            etaText = `${durationMinutes} minutes`;
+                        } else {
+                            const hours = Math.floor(durationMinutes / 60);
+                            const mins = durationMinutes % 60;
+                            etaText = `${hours} hour${hours > 1 ? 's' : ''}${mins > 0 ? ` ${mins} min` : ''}`;
+                        }
+                        
+                        document.getElementById('eta-display').textContent = etaText;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching route:', error);
+                    
+                    // Fallback to straight line if routing fails
+                    routeToPickupLine = L.polyline([
+                        [fromLat, fromLng],
+                        [toLat, toLng]
+                    ], {
+                        color: '#28a745', 
+                        weight: 4, 
+                        opacity: 0.7, 
+                        dashArray: '5, 10'
+                    }).addTo(map);
+                    
+                    // Fit map to show both markers
+                    if (fullRouteLine) {
+                        const combinedBounds = L.latLngBounds();
+                        combinedBounds.extend(routeToPickupLine.getBounds());
+                        combinedBounds.extend(fullRouteLine.getBounds());
+                        map.fitBounds(combinedBounds.pad(0.1));
+                    } else {
+                        map.fitBounds(routeToPickupLine.getBounds().pad(0.1));
+                    }
+                });
+        }
+    }
+    
+    // Function to calculate ETA
+    function calculateETA(fromLat, fromLng, toLat, toLng) {
+        // Use OSRM API to get route and duration
+        fetch(`https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=false`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.routes && data.routes.length > 0) {
+                    const durationSeconds = data.routes[0].duration;
+                    const durationMinutes = Math.round(durationSeconds / 60);
+                    
+                    let etaText;
+                    if (durationMinutes < 1) {
+                        etaText = 'Less than a minute';
+                    } else if (durationMinutes === 1) {
+                        etaText = '1 minute';
+                    } else if (durationMinutes < 60) {
+                        etaText = `${durationMinutes} minutes`;
+                    } else {
+                        const hours = Math.floor(durationMinutes / 60);
+                        const mins = durationMinutes % 60;
+                        etaText = `${hours} hour${hours > 1 ? 's' : ''}${mins > 0 ? ` ${mins} min` : ''}`;
+                    }
+                    
+                    document.getElementById('eta-display').textContent = etaText;
+                }
+            })
+            .catch(error => {
+                console.error('Error calculating ETA:', error);
+                document.getElementById('eta-display').textContent = 'Unable to calculate';
+            });
+    }
+    
+    // Event handlers for buttons
+    document.addEventListener('DOMContentLoaded', function() {
+        // Share Location button
+        const shareLocationBtn = document.getElementById('share-location-btn');
+        shareLocationBtn.addEventListener('click', function() {
+            if (navigator.geolocation) {
+                // Change button state to show it's working
+                shareLocationBtn.disabled = true;
+                shareLocationBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Getting Location...';
+                
+                // Get current position
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        // Success callback
+                        updateMyLocation(position);
+                        
+                        // Start continuous tracking
+                        if (watchId) {
+                            navigator.geolocation.clearWatch(watchId);
+                        }
+                        
+                        watchId = navigator.geolocation.watchPosition(
+                            updateMyLocation,
+                            function(error) {
+                                console.error('Error watching position:', error);
+                            },
+                            {
+                                enableHighAccuracy: true,
+                                maximumAge: 10000,
+                                timeout: 10000
+                            }
+                        );
+                        
+                        // Update button state
+                        shareLocationBtn.disabled = false;
+                        shareLocationBtn.innerHTML = '<i class="fas fa-location-arrow"></i> Location Sharing Active';
+                        shareLocationBtn.classList.remove('btn-success');
+                        shareLocationBtn.classList.add('btn-info');
+                        
+                        // Request notification permission if needed
+                        if ("Notification" in window && Notification.permission !== "granted") {
+                            Notification.requestPermission();
+                        }
+                    },
+                    function(error) {
+                        // Error callback
+                        console.error('Error getting location:', error);
+                        shareLocationBtn.disabled = false;
+                        shareLocationBtn.innerHTML = '<i class="fas fa-location-arrow"></i> Share My Location';
+                        
+                        // Show error message
+                        const alertDiv = document.createElement('div');
+                        alertDiv.className = 'alert alert-danger alert-dismissible fade show mt-3';
+                        alertDiv.innerHTML = `
+                            <strong>Location Error:</strong> ${error.message}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        `;
+                        document.querySelector('.card-body').appendChild(alertDiv);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        maximumAge: 0,
+                        timeout: 10000
+                    }
+                );
+            } else {
+                alert("Geolocation is not supported by this browser.");
+            }
+        });
+        
+        // I've Arrived button (for riders only)
+        const arrivedBtn = document.getElementById('arrived-btn');
+        if (arrivedBtn) {
+            arrivedBtn.addEventListener('click', function() {
+                if (socket) {
+                    socket.emit('rider_arrived', {
+                        request_id: requestId
+                    });
+                    
+                    // Show confirmation
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = 'alert alert-success alert-dismissible fade show';
+                    alertDiv.innerHTML = `
+                        <strong>Notification Sent!</strong> The traveler has been notified of your arrival.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
+                    document.querySelector('.container').prepend(alertDiv);
+                    
+                    // Disable button after use
+                    arrivedBtn.disabled = true;
+                    arrivedBtn.innerHTML = '<i class="fas fa-check-circle"></i> Arrival Notified';
+                }
+            });
+        }
+        
+        // Refresh Map button
+        const refreshMapBtn = document.getElementById('refresh-map-btn');
+        refreshMapBtn.addEventListener('click', function() {
+            // Temporarily change button state
+            refreshMapBtn.disabled = true;
+            refreshMapBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+            
+            // If we have both markers, fit the map to show them
+            if (myLocationMarker && otherLocationMarker) {
+                const bounds = L.latLngBounds(
+                    myLocationMarker.getLatLng(),
+                    otherLocationMarker.getLatLng()
+                );
+                
+                // Add pickup location to bounds
+                bounds.extend(pickupMarker.getLatLng());
+                
+                // Fit map to bounds
+                map.fitBounds(bounds.pad(0.1));
+            } else if (myLocationMarker) {
+                // If we only have our marker, center on it
+                map.setView(myLocationMarker.getLatLng(), 13);
+            } else if (otherLocationMarker) {
+                // If we only have the other user's marker, center on it
+                map.setView(otherLocationMarker.getLatLng(), 13);
+            } else {
+                // Default to pickup location
+                map.setView([pickupLat, pickupLng], 13);
+            }
+            
+            // If we have a current position, update it
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    updateMyLocation,
+                    function(error) {
+                        console.error('Error getting location:', error);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        maximumAge: 0,
+                        timeout: 10000
+                    }
+                );
+            }
+            
+            // Reset button state after a short delay
+            setTimeout(function() {
+                refreshMapBtn.disabled = false;
+                refreshMapBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Map';
+            }, 1000);
+        });
+    });
+    
+    // Clean up when leaving the page
+    window.addEventListener('beforeunload', function() {
+        if (watchId) {
+            navigator.geolocation.clearWatch(watchId);
+        }
+        
+        if (socket) {
+            socket.emit('leave_tracking_room', {
+                request_id: requestId
+            });
+        }
+    });
+</script>
+{% endblock %}

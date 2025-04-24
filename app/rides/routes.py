@@ -449,3 +449,41 @@ def rate_ride(request_id):
     
     return render_template('rides/rate_ride.html', title='Rate Ride', 
                          form=form, request=ride_request)
+
+# Adding Real-time Location Tracking for Riders and Travelers
+
+# I'll implement a feature that allows both riders and travelers to see each other's locations on a map for accepted ride requests. This will help riders find the pickup location and travelers track their ride's arrival.
+
+# Let's create a new page for real-time location tracking that both parties can access:
+
+## 1. First, let's create a new route in the rides blueprint
+# Add this after the other route functions
+
+@bp.route('/track/<int:request_id>')
+@login_required
+def track_ride(request_id):
+    ride_request = RideRequest.query.get_or_404(request_id)
+    ride = ride_request.ride
+    
+    # Check if user is authorized (either the rider or the traveler)
+    if current_user.id != ride.rider_id and current_user.id != ride_request.traveler_id:
+        flash('You are not authorized to access this tracking page.', 'danger')
+        return redirect(url_for('rides.my_rides'))
+    
+    # Check if the request is accepted
+    if ride_request.status != 'accepted':
+        flash('Tracking is only available for accepted ride requests.', 'warning')
+        return redirect(url_for('rides.my_rides'))
+    
+    # Get the other user (the one who is not the current user)
+    other_user = ride.rider if current_user.id == ride_request.traveler_id else ride_request.traveler
+    
+    # Determine if current user is rider or traveler
+    is_rider = current_user.id == ride.rider_id
+    
+    return render_template('rides/track_ride.html', 
+                          title='Track Ride',
+                          ride=ride,
+                          ride_request=ride_request,
+                          other_user=other_user,
+                          is_rider=is_rider)

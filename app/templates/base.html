@@ -18,47 +18,67 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container">
             <a class="navbar-brand" href="{{ url_for('main.index') }}">
-                <i class="fas fa-car-side"></i> RideShare
+                <i class="fas fa-car-side me-2"></i>RideShare
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
+            <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('main.index') }}">Home</a>
                     </li>
                     {% if current_user.is_authenticated %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('rides.my_rides') }}">My Rides</a>
+                    </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('rides.find_ride', _external=True) }}">Find Ride</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('rides.offer_ride') }}">Offer Ride</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('green.dashboard') }}">Green Dashboard</a>
+                    </li>
                     {% endif %}
                 </ul>
-                <ul class="navbar-nav">
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
                     {% if current_user.is_authenticated %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('rides.my_rides') }}">My Rides</a>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="greenDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-leaf"></i> Green Credits
+                    <!-- Add this right before the notifications.js script -->
+                    {% if current_user.is_authenticated %}
+                    <script>
+                        const currentUserId = {{ current_user.id }};
+                    </script>
+                    {% endif %}
+                    <!-- Add notification icon -->
+                    <li class="nav-item dropdown me-2">
+                        <a class="nav-link position-relative" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-bell"></i>
+                            <span id="notification-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none">
+                                <span id="notification-count">0</span>
+                                <span class="visually-hidden">unread messages</span>
+                            </span>
                         </a>
-                        <ul class="dropdown-menu" aria-labelledby="greenDropdown">
-                            <li><a class="dropdown-item" href="{{ url_for('green.dashboard') }}">Dashboard</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('green.leaderboard') }}">Leaderboard</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('green.achievements') }}">Achievements</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('green.redeem_credits') }}">Redeem Credits</a></li>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="notificationsDropdown" style="width: 300px;" id="notifications-container">
+                            <li><h6 class="dropdown-header">Notifications</h6></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li id="no-notifications" class="dropdown-item text-center text-muted">No new notifications</li>
                         </ul>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-user"></i> {{ current_user.username }}
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            {% if current_user.profile_picture %}
+                            <img src="{{ url_for('static', filename='uploads/' + current_user.profile_picture) }}" class="rounded-circle me-1" width="24" height="24">
+                            {% else %}
+                            <i class="fas fa-user-circle me-1"></i>
+                            {% endif %}
+                            {{ current_user.username }}
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
                             <li><a class="dropdown-item" href="{{ url_for('main.profile') }}">Profile</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('green.dashboard') }}">Green Dashboard</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('green.achievements') }}">Achievements</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">Logout</a></li>
                         </ul>
@@ -102,10 +122,143 @@
         </div>
     </footer>
 
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Custom JS -->
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    {% block scripts %}{% endblock %}
+    <!-- Bootstrap JS and other scripts -->
+    {% block scripts %}
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://kit.fontawesome.com/your-fontawesome-kit.js"></script>
+    {% if current_user.is_authenticated %}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Connect to SocketIO
+            const socket = io();
+            
+            // Join user's personal notification room
+            socket.emit('join_notification_room', {
+                user_id: {{ current_user.id }}
+            });
+            
+            // Handle incoming notifications
+            socket.on('new_message_notification', function(data) {
+                // Update notification badge
+                const badge = document.getElementById('notification-badge');
+                const count = document.getElementById('notification-count');
+                const container = document.getElementById('notifications-container');
+                const noNotifications = document.getElementById('no-notifications');
+                
+                // Remove "no notifications" message if it exists
+                if (noNotifications) {
+                    noNotifications.classList.add('d-none');
+                }
+                
+                // Create new notification item
+                const notificationItem = document.createElement('li');
+                notificationItem.innerHTML = `
+                    <a class="dropdown-item d-flex align-items-center" href="/chat/${data.request_id}">
+                        <div class="me-3">
+                            <div class="bg-primary rounded-circle p-2 text-white">
+                                <i class="fas fa-comment-alt"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="small text-muted">${new Date(data.timestamp).toLocaleString()}</div>
+                            <span>New message from <strong>${data.sender_name}</strong></span>
+                        </div>
+                    </a>
+                `;
+                
+                // Insert at the top of the list
+                container.insertBefore(notificationItem, container.children[2]);
+                
+                // Update count and show badge
+                let currentCount = parseInt(count.textContent);
+                count.textContent = currentCount + 1;
+                badge.classList.remove('d-none');
+                
+                // Play notification sound
+                const audio = new Audio('/static/sounds/notification.mp3');
+                audio.play().catch(e => console.log('Error playing sound:', e));
+                
+                // Show browser notification if supported
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification('New message from ' + data.sender_name, {
+                        body: 'Click to view the conversation',
+                        icon: '/static/img/logo.png'
+                    });
+                }
+            });
+            
+            // Request notification permission
+            if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+                Notification.requestPermission();
+            }
+            
+            // Fetch unread messages count on page load
+            fetch('/api/notifications/unread')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.unread_count > 0) {
+                        const badge = document.getElementById('notification-badge');
+                        const count = document.getElementById('notification-count');
+                        count.textContent = data.unread_count;
+                        badge.classList.remove('d-none');
+                        
+                        // Also fetch notification items
+                        return fetch('/api/notifications');
+                    }
+                })
+                .then(response => {
+                    if (response) return response.json();
+                })
+                .then(data => {
+                    if (data && data.notifications.length > 0) {
+                        const container = document.getElementById('notifications-container');
+                        const noNotifications = document.getElementById('no-notifications');
+                        
+                        // Remove "no notifications" message
+                        if (noNotifications) {
+                            noNotifications.classList.add('d-none');
+                        }
+                        
+                        // Add notification items
+                        data.notifications.forEach(notification => {
+                            const notificationItem = document.createElement('li');
+                            notificationItem.innerHTML = `
+                                <a class="dropdown-item d-flex align-items-center" href="${notification.link}">
+                                    <div class="me-3">
+                                        <div class="bg-primary rounded-circle p-2 text-white">
+                                            <i class="fas ${notification.icon}"></i>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="small text-muted">${new Date(notification.timestamp).toLocaleString()}</div>
+                                        <span>${notification.text}</span>
+                                    </div>
+                                </a>
+                            `;
+                            container.insertBefore(notificationItem, container.children[2]);
+                        });
+                    }
+                })
+                .catch(error => console.error('Error fetching notifications:', error));
+        });
+    </script>
+    {% endif %}
+    {% endblock %}
 </body>
 </html>
+
+<!-- Add this in the head section or at the end of the body -->
+<script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
+<!-- Add this in the navigation bar, typically after the user menu -->
+<li class="nav-item dropdown">
+    <a class="nav-link dropdown-toggle position-relative" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+        <i class="fas fa-bell"></i>
+        <span id="notification-badge" class="badge bg-danger rounded-pill position-absolute top-0 start-100 translate-middle d-none">0</span>
+    </a>
+    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="notificationsDropdown" id="notifications-container">
+        <li><h6 class="dropdown-header">Notifications</h6></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item text-center" href="#" id="no-notifications">No new notifications</a></li>
+    </ul>
+</li>

@@ -186,7 +186,7 @@ def check_achievements(user):
     
     for achievement in achievements:
         # Skip if already earned
-        if achievement.id in earned_achievement_ids:
+        if achievement.id in earned_achievement_ids:  # This line has the error - using earned_ids instead of earned_achievement_ids
             continue
         
         # Check if achievement should be awarded
@@ -209,22 +209,39 @@ def check_achievements(user):
             total_credits = user.get_total_credits()
             should_award = total_credits >= achievement.requirement
         
-        # Award achievement if conditions met
+        # Award achievement if criteria met
         if should_award:
             new_achievement = UserAchievement(
                 user_id=user.id,
                 achievement_id=achievement.id,
-                earned_at=datetime.utcnow()
+                earned_date=datetime.utcnow()
             )
             db.session.add(new_achievement)
             
-            # Bonus credits for earning achievement
-            bonus_credit = GreenCredit(
+            # Add notification
+            notification = Notification(
                 user_id=user.id,
-                amount=25,  # Bonus credits for achievement
-                reason=f"Earned achievement: {achievement.name}"
+                message=f"You've earned the '{achievement.name}' achievement!",
+                icon=achievement.icon,
+                link=url_for('green.achievements')
             )
-            db.session.add(bonus_credit)
+            db.session.add(notification)
+            
+            # Award bonus credits for achievement
+            bonus_credits = GreenCredit(
+                user_id=user.id,
+                amount=20,  # Bonus credits for achievement
+                reason=f"Achievement bonus: {achievement.name}",
+                ride_id=None
+            )
+            db.session.add(bonus_credits)
+            
+            # Commit changes
+            try:
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f"Error awarding achievement: {str(e)}")
 
 # Carbon saved achievements
             carbon_achievements = Achievement.query.filter_by(achievement_type='carbon_saved').all()

@@ -11,6 +11,24 @@
     .coordinates-group {
         display: none;
     }
+    .suggestions-container {
+        position: absolute;
+        z-index: 1000;
+        background: white;
+        width: 100%;
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid #ced4da;
+        border-radius: 0 0 0.25rem 0.25rem;
+        display: none;
+    }
+    .suggestion-item {
+        padding: 8px 12px;
+        cursor: pointer;
+    }
+    .suggestion-item:hover {
+        background-color: #f8f9fa;
+    }
 </style>
 {% endblock %}
 
@@ -47,11 +65,17 @@
                         
                         <div class="mb-3">
                             {{ form.pickup_location.label(class="form-label") }}
-                            {{ form.pickup_location(class="form-control" + (" is-invalid" if form.pickup_location.errors else "")) }}
+                            <div class="input-group">
+                                {{ form.pickup_location(class="form-control" + (" is-invalid" if form.pickup_location.errors else ""), id="pickup_location", autocomplete="off") }}
+                                <button type="button" class="btn btn-primary" id="useCurrentLocationBtn">
+                                    <i class="fas fa-location-arrow"></i> Current Location
+                                </button>
+                            </div>
+                            <div id="pickup_suggestions" class="suggestions-container"></div>
                             {% for error in form.pickup_location.errors %}
                                 <div class="invalid-feedback">{{ error }}</div>
                             {% endfor %}
-                            <small class="text-muted">Click on the map to set pickup location</small>
+                            <small class="text-muted">Click on the map to set pickup location or use current location</small>
                         </div>
 
                         <div class="coordinates-group">
@@ -109,28 +133,182 @@
     var pickupMarker;
     var pickupLatInput = document.getElementById('pickup_lat');
     var pickupLngInput = document.getElementById('pickup_lng');
+    var pickupLocationInput = document.getElementById('pickup_location');
+    var pickupSuggestions = document.getElementById('pickup_suggestions');
+    var debounceTimer;
 
-    // Handle map clicks for pickup location
-    map.on('click', function(e) {
-        var latlng = e.latlng;
-        
+    // Add location search functionality
+    pickupLocationInput.addEventListener('input', function(e) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            searchLocation(e.target.value);
+        }, 300);
+    });
+
+    // Location search function
+    async function searchLocation(query) {
+        if (!query || query.length < 3) {
+            pickupSuggestions.style.display = 'none';
+            return;
+        }
+
+        try {
+            // Define common locations (you can customize this list)
+            const commonLocations = {
+                "college": {
+                    display_name: "College Campus, Main Street",
+                    lat: "18.5204",
+                    lon: "73.8567"
+                },
+                "railway station": {
+                    display_name: "Central Railway Station, Pune",
+                    lat: "18.5290",
+                    lon: "73.8744"
+                },
+                "airport": {
+                    display_name: "Pune International Airport",
+                    lat: "18.5793",
+                    lon: "73.9089"
+                }
+            };
+
+            // Clear previous suggestions
+            pickupSuggestions.innerHTML = '';
+            
+            // Check common locations first
+            const lowerQuery = query.toLowerCase();
+            let matches = [];
+            
+            for (let key in commonLocations) {
+                if (key.includes(lowerQuery) || lowerQuery.includes(key)) {
+                    matches.push(commonLocations[key]);
+                }
+            }
+            
+            // Add common location matches
+            matches.forEach(place => {
+                const div = document.createElement('div');
+                div.className = 'suggestion-item';
+                div.textContent = place.display_name;
+                div.onclick = () => {
+                    pickupLocationInput.value = place.display_name;
+                    pickupLatInput.value = place.lat;
+                    pickupLngInput.value = place.lon;
+                    pickupSuggestions.style.display = 'none';
+                    updatePickupMarker(place.lat, place.lon);
+                };
+                pickupSuggestions.appendChild(div);
+            });
+
+            // Fetch from OpenStreetMap Nominatim API
+            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`);
+            const data = await response.json();
+            
+            // Add OpenStreetMap results
+            data.forEach(place => {
+                const div = document.createElement('div');
+                div.className = 'suggestion-item';
+                div.textContent = place.display_name;
+                div.onclick = () => {
+                    pickupLocationInput.value = place.display_name;
+                    pickupLatInput.value = place.lat;
+                    pickupLngInput.value = place.lon;
+                    pickupSuggestions.style.display = 'none';
+                    updatePickupMarker(place.lat, place.lon);
+                };
+                pickupSuggestions.appendChild(div);
+            });
+            
+            pickupSuggestions.style.display = (matches.length || data.length) ? 'block' : 'none';
+        } catch (error) {
+            console.error('Error fetching suggestions:', error);
+        }
+    }
+
+    // Function to update pickup marker
+    function updatePickupMarker(lat, lng) {
         if (pickupMarker) {
             map.removeLayer(pickupMarker);
         }
         
-        pickupMarker = L.marker(latlng, {draggable: true})
+        pickupMarker = L.marker([lat, lng], {draggable: true})
             .addTo(map)
             .bindPopup('Pickup Location')
             .openPopup();
         
-        pickupLatInput.value = latlng.lat;
-        pickupLngInput.value = latlng.lng;
+        map.setView([lat, lng], 15);
         
         pickupMarker.on('dragend', function(e) {
             var pos = e.target.getLatLng();
             pickupLatInput.value = pos.lat;
             pickupLngInput.value = pos.lng;
+            
+            // Update address when marker is dragged
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.lat}&lon=${pos.lng}`)
+                .then(response => response.json())
+                .then(data => {
+                    pickupLocationInput.value = data.display_name;
+                })
+                .catch(error => {
+                    console.error('Error reverse geocoding:', error);
+                });
         });
+    }
+
+    // Handle map clicks for pickup location
+    map.on('click', function(e) {
+        var latlng = e.latlng;
+        
+        pickupLatInput.value = latlng.lat;
+        pickupLngInput.value = latlng.lng;
+        
+        // Reverse geocode to get address for the clicked location
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latlng.lat}&lon=${latlng.lng}`)
+            .then(response => response.json())
+            .then(data => {
+                pickupLocationInput.value = data.display_name;
+                updatePickupMarker(latlng.lat, latlng.lng);
+            })
+            .catch(error => {
+                console.error('Error reverse geocoding:', error);
+                updatePickupMarker(latlng.lat, latlng.lng);
+            });
+    });
+    
+    // Add current location functionality
+    document.getElementById('useCurrentLocationBtn').addEventListener('click', function() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(async function(position) {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                
+                // Update form fields
+                pickupLatInput.value = lat;
+                pickupLngInput.value = lng;
+                
+                // Reverse geocode to get address
+                try {
+                    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                    const data = await response.json();
+                    pickupLocationInput.value = data.display_name;
+                    updatePickupMarker(lat, lng);
+                } catch (error) {
+                    console.error('Error reverse geocoding:', error);
+                    updatePickupMarker(lat, lng);
+                }
+            }, function(error) {
+                alert("Error getting location: " + error.message);
+            });
+        } else {
+            alert("Geolocation is not supported by your browser.");
+        }
+    });
+
+    // Close suggestions when clicking outside
+    document.addEventListener('click', function(e) {
+        if (e.target !== pickupLocationInput && e.target !== pickupSuggestions) {
+            pickupSuggestions.style.display = 'none';
+        }
     });
 </script>
 {% endblock %}
